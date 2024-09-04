@@ -121,7 +121,7 @@ class DetLocalVisualizer(Visualizer):
         Returns:
             np.ndarray: the drawn image which channel is RGB.
         """
-        self.set_image(image)
+        self.set_image(image)# 1024 128 3
 
         if 'bboxes' in instances and instances.bboxes.sum() > 0:
             bboxes = instances.bboxes
@@ -395,6 +395,7 @@ class DetLocalVisualizer(Visualizer):
             name: str,
             image: np.ndarray,
             data_sample: Optional['DetDataSample'] = None,
+            callback: Optional = None,
             draw_gt: bool = True,
             draw_pred: bool = True,
             show: bool = False,
@@ -403,6 +404,7 @@ class DetLocalVisualizer(Visualizer):
             out_file: Optional[str] = None,
             pred_score_thr: float = 0.3,
             step: int = 0) -> None:
+
         """Draw datasample and save to all backends.
 
         - If GT and prediction are plotted at the same time, they are
@@ -443,13 +445,18 @@ class DetLocalVisualizer(Visualizer):
         if draw_gt and data_sample is not None:
             gt_img_data = image
             if 'gt_instances' in data_sample:
+                h,w =  data_sample.gt_instances.masks.height, data_sample.gt_instances.masks.width
+                imgh,imgw = image.shape[0],image.shape[1]
+                if imgh != h or imgw != w:
+                    image = mmcv.imresize(image,(w,h)) # 1024 1280 - > 819 1024
                 gt_img_data = self._draw_instances(image,
-                                                   data_sample.gt_instances,
+                                                   data_sample.gt_instances, # 819 1024
                                                    classes, palette)
-            if 'gt_sem_seg' in data_sample:
-                gt_img_data = self._draw_sem_seg(gt_img_data,
-                                                 data_sample.gt_sem_seg,
-                                                 classes, palette)
+                gt_img_data = mmcv.imresize(gt_img_data,(imgw,imgh))
+                # if 'gt_sem_seg' in data_sample:
+            #     gt_img_data = self._draw_sem_seg(gt_img_data,
+            #                                      data_sample.gt_sem_seg,
+            #                                      classes, palette)
 
             if 'gt_panoptic_seg' in data_sample:
                 assert classes is not None, 'class information is ' \
@@ -465,13 +472,17 @@ class DetLocalVisualizer(Visualizer):
                 pred_instances = data_sample.pred_instances
                 pred_instances = pred_instances[
                     pred_instances.scores > pred_score_thr]
+                _,h,w =  pred_instances.masks.shape
+                imgh,imgw = image.shape[0],image.shape[1]
+                if imgh != h or imgw != w:
+                    image = mmcv.imresize(image,(w,h))
                 pred_img_data = self._draw_instances(image, pred_instances,
                                                      classes, palette)
-
-            if 'pred_sem_seg' in data_sample:
-                pred_img_data = self._draw_sem_seg(pred_img_data,
-                                                   data_sample.pred_sem_seg,
-                                                   classes, palette)
+                pred_img_data = mmcv.imresize(pred_img_data,(w,h))
+            # if 'pred_sem_seg' in data_sample:
+            #     pred_img_data = self._draw_sem_seg(pred_img_data,
+            #                                        data_sample.pred_sem_seg,
+            #                                        classes, palette)
 
             if 'pred_panoptic_seg' in data_sample:
                 assert classes is not None, 'class information is ' \
@@ -491,7 +502,8 @@ class DetLocalVisualizer(Visualizer):
         else:
             # Display the original image directly if nothing is drawn.
             drawn_img = image
-
+        if callback:
+            callback(drawn_img)
         # It is convenient for users to obtain the drawn image.
         # For example, the user wants to obtain the drawn image and
         # save it as a video during video inference.
