@@ -445,7 +445,10 @@ class DetLocalVisualizer(Visualizer):
         if draw_gt and data_sample is not None:
             gt_img_data = image
             if 'gt_instances' in data_sample:
-                h,w =  data_sample.gt_instances.masks.height, data_sample.gt_instances.masks.width
+                try:
+                    h,w =  data_sample.gt_instances.masks.height, data_sample.gt_instances.masks.width
+                except:
+                    c,h,w = data_sample.gt_instances.masks.shape
                 imgh,imgw = image.shape[0],image.shape[1]
                 if imgh != h or imgw != w:
                     image = mmcv.imresize(image,(w,h)) # 1024 1280 - > 819 1024
