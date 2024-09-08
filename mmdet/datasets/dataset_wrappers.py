@@ -1,13 +1,171 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import collections
 import copy
+import random
 from typing import List, Sequence, Union
-
 from mmengine.dataset import BaseDataset
 from mmengine.dataset import ConcatDataset as MMENGINE_ConcatDataset
 from mmengine.dataset import force_full_init
-
 from mmdet.registry import DATASETS, TRANSFORMS
+
+
+@DATASETS.register_module()
+class MultiImageMixEvenSamplerDataset:
+    """A wrapper of multiple images mixed dataset with batch-based reinitialization and global seed setting.
+
+    This dataset builds upon the MultiImageMixDataset and adds functionality
+    for batch-based reinitialization. It reinitializes the dataset after
+    processing each batch, counting the number of initializations and using
+    this count to set global seeds for random
+
+    Args:
+        dataset (Union[BaseDataset, dict]): The dataset to be mixed.
+        pipeline (Sequence[dict]): Sequence of transform object or config dict to be composed.
+        batch_size (int): The batch size used in the dataloader for a single GPU.
+        skip_type_keys (Sequence[str], optional): Sequence of type string to be skip pipeline.
+        max_refetch (int): The maximum number of retry iterations for getting valid
+            results from the pipeline. Default: 15.
+        lazy_init (bool): Whether to load annotation during instantiation.
+            Default: False.
+        mode (str): Mode of the dataset, either 'train' or 'val'.
+    """
+
+    def __init__(self,
+                 dataset: Union[BaseDataset, dict],
+                 pipeline: Sequence[dict],
+                 batch_size: int,
+                 skip_type_keys: Union[Sequence[str], None] = None,
+                 max_refetch: int = 15,
+                 lazy_init: bool = False,
+                 mode: str = 'train') -> None:
+        assert isinstance(pipeline, collections.abc.Sequence)
+        if skip_type_keys is not None:
+            assert all([
+                isinstance(skip_type_key, str)
+                for skip_type_key in skip_type_keys
+            ])
+        self._skip_type_keys = skip_type_keys
+
+        self.pipeline = []
+        self.pipeline_types = []
+        for transform in pipeline:
+            if isinstance(transform, dict):
+                self.pipeline_types.append(transform['type'])
+                transform = TRANSFORMS.build(transform)
+                self.pipeline.append(transform)
+            else:
+                raise TypeError('pipeline must be a dict')
+
+        self.dataset_cfg = dataset
+        self.max_refetch = max_refetch
+        self.batch_size = batch_size
+        self.mode = mode
+        assert mode in ['train', 'val'], f"Mode must be 'train' or 'val', got {mode}"
+
+        self._fully_initialized = False
+        self.init_count = 0
+        self.sample_count = 0
+        if not lazy_init:
+            self.full_init()
+
+    @property
+    def metainfo(self) -> dict:
+        """Get the meta information of the multi-image-mixed dataset."""
+        return copy.deepcopy(self._metainfo)
+
+    def set_global_seeds(self):
+        """Set global seeds for random, torch, and numpy using the initialization count."""
+        seed = self.init_count
+        random.seed(seed)
+
+    def full_init(self):
+        """Fully initialize the dataset and set global seeds."""
+        if isinstance(self.dataset_cfg, dict):
+            self.dataset = DATASETS.build(self.dataset_cfg)
+        elif isinstance(self.dataset_cfg, BaseDataset):
+            self.dataset = self.dataset_cfg
+        else:
+            raise TypeError(
+                'elements in datasets sequence should be config or '
+                f'`BaseDataset` instance, but got {type(self.dataset_cfg)}')
+
+        self.dataset.full_init()
+        self._metainfo = self.dataset.metainfo
+        if hasattr(self.dataset, 'flag'):
+            self.flag = self.dataset.flag
+        self.num_samples = len(self.dataset)
+        self._ori_len = len(self.dataset)
+        self._fully_initialized = True
+        self.sample_count = 0
+        self.init_count += 1
+
+        self.set_global_seeds()
+
+        # print(f"[DEBUG] {self.mode}: Dataset initialized (count: {self.init_count}). "
+        #       f"Num samples: {self.num_samples}. Global seed set to: {self.init_count}")
+
+    @force_full_init
+    def get_data_info(self, idx: int) -> dict:
+        """Get annotation by index."""
+        return self.dataset.get_data_info(idx)
+
+    @force_full_init
+    def __len__(self):
+        return self.num_samples
+
+    def __getitem__(self, idx):
+        if self.sample_count >= self.batch_size:
+            self.full_init()
+            self.sample_count = 0
+
+        idx = idx % self.num_samples
+        self.sample_count += 1
+
+        results = copy.deepcopy(self.dataset[idx])
+        for (transform, transform_type) in zip(self.pipeline, self.pipeline_types):
+            if self._skip_type_keys is not None and transform_type in self._skip_type_keys:
+                continue
+
+            if hasattr(transform, 'get_indexes'):
+                for i in range(self.max_refetch):
+                    indexes = transform.get_indexes(self.dataset)
+                    if not isinstance(indexes, collections.abc.Sequence):
+                        indexes = [indexes]
+                    indexes = [index % self.num_samples for index in indexes]  # Ensure indexes are within bounds
+                    mix_results = [
+                        copy.deepcopy(self.dataset[index]) for index in indexes
+                    ]
+                    if None not in mix_results:
+                        results['mix_results'] = mix_results
+                        break
+                else:
+                    raise RuntimeError(
+                        'The loading pipeline of the original dataset'
+                        ' always return None. Please check the correctness '
+                        'of the dataset and its pipeline.')
+
+            for i in range(self.max_refetch):
+                updated_results = transform(copy.deepcopy(results))
+                if updated_results is not None:
+                    results = updated_results
+                    break
+            else:
+                raise RuntimeError(
+                    'The training pipeline of the dataset wrapper'
+                    ' always return None. Please check the correctness '
+                    'of the dataset and its pipeline.')
+
+            if 'mix_results' in results:
+                results.pop('mix_results')
+
+        return results
+
+    def update_skip_type_keys(self, skip_type_keys):
+        """Update skip_type_keys. It is called by an external hook."""
+        assert all([
+            isinstance(skip_type_key, str) for skip_type_key in skip_type_keys
+        ])
+        self._skip_type_keys = skip_type_keys
 
 
 @DATASETS.register_module()
