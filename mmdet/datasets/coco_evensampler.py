@@ -87,7 +87,9 @@ class CocoEevenSamplerDataset(BaseDetDataset):
         image_types = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.gif', '.ico', '.jfif', '.webp')  # define supported image types
 
         # Group images by dataset
+
         total_n_images = 0
+
         images_by_dataset = defaultdict(list)
         for dataset in self.all_datasets:
             dataset_path = os.path.join(self.data_root, dataset, subfolder)
@@ -99,6 +101,7 @@ class CocoEevenSamplerDataset(BaseDetDataset):
                             images_by_dataset[dataset].append(file)
 
         # print(f'Total images from all datasets = {total_n_images}')
+
         samples_per_dataset = self.total_samples // len(self.all_datasets)  # calculate number of samples per dataset
 
         # Sample images from each dataset
@@ -109,7 +112,6 @@ class CocoEevenSamplerDataset(BaseDetDataset):
             else:
                 sampled_images[dataset] = random.sample(images, samples_per_dataset)
 
-        # Print sampling results
         # print(f"\nSampling Results for {'train' if is_train else 'val'} data:")
         # for dataset, images in sampled_images.items():
         #     print(f"\nDataset: {dataset}")
