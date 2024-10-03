@@ -56,7 +56,7 @@ class YTVIS:
         ), dict()
         self.vidToAnns, self.catToVids = defaultdict(list), defaultdict(list)
         if annotation_file is not None:
-            print('loading annotations into memory...')
+            # print('loading annotations into memory...')
             tic = time.time()
             if type(annotation_file) == str:
                 dataset = json.load(open(annotation_file, 'r'))
@@ -71,8 +71,9 @@ class YTVIS:
             self.createIndex()
 
     def createIndex(self):
+        print('I am called!!!!!!!!!!!!!')
         # create index
-        print('creating index...')
+        # print('creating index...')
         anns, cats, vids = {}, {}, {}
         vidToAnns, catToVids = defaultdict(list), defaultdict(list)
         if 'annotations' in self.dataset:
@@ -92,7 +93,7 @@ class YTVIS:
             for ann in self.dataset['annotations']:
                 catToVids[ann['category_id']].append(ann['video_id'])
 
-        print('index created!')
+        # print('index created!')
 
         # create class members
         self.anns = anns

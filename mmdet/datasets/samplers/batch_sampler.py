@@ -1,10 +1,71 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-from typing import Sequence
-
+import os
+import math
+import random
+from typing import Sequence, Iterator, Optional, Sized
+import numpy as np
+import torch
 from torch.utils.data import BatchSampler, Sampler
-
+from mmengine.dist import get_dist_info, sync_random_seed
 from mmdet.datasets.samplers.track_img_sampler import TrackImgSampler
 from mmdet.registry import DATA_SAMPLERS
+
+
+@DATA_SAMPLERS.register_module()
+class DistributedSampler(Sampler):
+    """Distributed Sampler that restricts data loading to a subset of the dataset, uniquely shuffled per GPU, with logging."""
+    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True, seed=42):
+        if num_replicas is None:
+            if not torch.distributed.is_initialized():
+                raise RuntimeError("Distributed package is not initialized")
+            num_replicas = torch.distributed.get_world_size()
+        if rank is None:
+            if not torch.distributed.is_initialized():
+                raise RuntimeError("Distributed package is not initialized")
+            rank = torch.distributed.get_rank()
+
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.rank = rank
+        self.shuffle = shuffle
+        self.seed = seed
+        self.epoch = 0
+        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        self.total_size = self.num_samples * self.num_replicas
+
+        # Log the initialization to show each rank and the associated GPU
+        print(f"Initialized DistributedSampler on Rank {self.rank}, GPU {torch.cuda.current_device()}")
+
+    def __iter__(self):
+        # Setting a unique seed for each GPU based on the combination of the global seed, rank, and epoch
+        g = torch.Generator()
+        g.manual_seed(self.seed + self.rank + self.epoch)
+
+        # Generate a random permutation of indices
+        indices = torch.randperm(len(self.dataset), generator=g).tolist()
+
+        # Add extra indices to make it evenly divisible
+        indices += indices[:(self.total_size - len(indices))]
+        indices = indices[:self.total_size]
+
+        # Subsample the indices for this specific replica
+        start = self.rank * self.num_samples
+        end = start + self.num_samples
+        subset_indices = indices[start:end]
+        assert len(subset_indices) == self.num_samples
+
+        # Log the indices that each rank (GPU) will process
+        print(f"Rank {self.rank}, GPU {torch.cuda.current_device()} will process indices: {subset_indices[:10]}...")
+
+        return iter(subset_indices)
+
+    def __len__(self):
+        return self.num_samples
+
+    def set_epoch(self, epoch):
+        """Sets the epoch for this sampler. This affects the seed for generating random indices."""
+        self.epoch = epoch
+        print(f"Rank {self.rank}, GPU {torch.cuda.current_device()} starts Epoch {self.epoch}")
 
 
 # TODO: maybe replace with a data_loader wrapper
