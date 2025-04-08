@@ -4,7 +4,6 @@ import argparse
 from collections import defaultdict
 from datetime import datetime
 
-
 def combine_coco_jsons(root_dir):
     combined_data = {
         'train': {
@@ -43,7 +42,6 @@ def combine_coco_jsons(root_dir):
             # Handle info
             if not combined_data[split]['info']:
                 combined_data[split]['info'] = data.get('info', {})
-
             # Handle licenses
             for license in data.get('licenses', []):
                 if license['id'] not in license_id_mapping:
@@ -65,7 +63,6 @@ def combine_coco_jsons(root_dir):
                 old_image_id = image['id']
                 new_image_id = len(combined_data[split]['images']) + 1
                 image_id_mapping[split][old_image_id] = new_image_id
-
                 image['id'] = new_image_id
                 # Update file_name to include the correct path with the 'train_sahi' or 'val_sahi' folder
                 image['file_name'] = os.path.join(dataset_folder, folder, image['file_name'])
