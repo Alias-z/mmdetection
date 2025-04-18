@@ -4,6 +4,7 @@ import argparse
 from collections import defaultdict
 from datetime import datetime
 
+
 def combine_coco_jsons(root_dir):
     combined_data = {
         'train': {
@@ -98,6 +99,9 @@ def combine_coco_jsons(root_dir):
             json.dump(combined_data[split], f, indent=2)
         print(f"Combined COCO JSON for {split} saved to: {output_path}")
         print(f"Number of categories in {split}: {len(combined_data[split]['categories'])}")
+        print(f"Number of images in {split}: {len(combined_data[split]['images'])}")
+        print(f"Number of annotations in {split}: {len(combined_data[split]['annotations'])}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Combine COCO JSON files from multiple datasets.")
@@ -109,13 +113,6 @@ def main():
     print(f"Processing datasets in: {root_dir}")
     combine_coco_jsons(root_dir)
 
+
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
