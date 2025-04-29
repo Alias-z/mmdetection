@@ -127,7 +127,7 @@ def combine_coco_jsons(root_dir, sample_ratio=1.0, random_seed=123):
               f"Val={counts['val']}/{counts['orig_val']} images ({counts['val']/max(1, counts['orig_val'])*100:.1f}%)")
 
     for split in ['train', 'val']:
-        output_path = os.path.join(root_dir, f'sahi_coco_{split}_{int(sample_ratio*100)}pct_seed{random_seed}.json')
+        output_path = os.path.join(root_dir, f'sahi_coco_{split}.json')
         with open(output_path, 'w') as f:
             json.dump(combined_data[split], f, indent=2)
         print(f"\nCombined COCO JSON for {split} saved to: {output_path}")
